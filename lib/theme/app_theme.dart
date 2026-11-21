@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 class AppColors {
   // Brand & Primary
@@ -70,7 +69,7 @@ class AppTheme {
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.light,
-      fontFamily: GoogleFonts.inter().fontFamily,
+      fontFamily: 'Inter',
       scaffoldBackgroundColor: AppColors.background,
       colorScheme: const ColorScheme(
         brightness: Brightness.light,
@@ -98,76 +97,87 @@ class AppTheme {
         inverseSurface: AppColors.inverseSurface,
         onInverseSurface: AppColors.inverseOnSurface,
       ),
-      textTheme: TextTheme(
-        displayLarge: GoogleFonts.inter(
+      textTheme: const TextTheme(
+        displayLarge: TextStyle(
+          fontFamily: 'Inter',
           fontSize: 36,
           fontWeight: FontWeight.w700,
           letterSpacing: -0.9,
           color: AppColors.onSurface,
         ),
-        headlineLarge: GoogleFonts.inter(
+        headlineLarge: TextStyle(
+          fontFamily: 'Inter',
           fontSize: 28,
           fontWeight: FontWeight.w700,
           letterSpacing: -0.56,
           color: AppColors.onSurface,
         ),
-        headlineMedium: GoogleFonts.inter(
+        headlineMedium: TextStyle(
+          fontFamily: 'Inter',
           fontSize: 22,
           fontWeight: FontWeight.w600,
           letterSpacing: -0.33,
           color: AppColors.onSurface,
         ),
-        headlineSmall: GoogleFonts.inter(
+        headlineSmall: TextStyle(
+          fontFamily: 'Inter',
           fontSize: 18,
           fontWeight: FontWeight.w600,
           letterSpacing: -0.18,
           color: AppColors.onSurface,
         ),
-        bodyLarge: GoogleFonts.inter(
+        bodyLarge: TextStyle(
+          fontFamily: 'Inter',
           fontSize: 16,
           fontWeight: FontWeight.w400,
           letterSpacing: -0.08,
           color: AppColors.onSurface,
         ),
-        bodyMedium: GoogleFonts.inter(
+        bodyMedium: TextStyle(
+          fontFamily: 'Inter',
           fontSize: 14,
           fontWeight: FontWeight.w400,
           color: AppColors.onSurface,
         ),
-        bodySmall: GoogleFonts.inter(
+        bodySmall: TextStyle(
+          fontFamily: 'Inter',
           fontSize: 13,
           fontWeight: FontWeight.w400,
           color: AppColors.onSurfaceVariant,
         ),
-        labelLarge: GoogleFonts.inter(
+        labelLarge: TextStyle(
+          fontFamily: 'Inter',
           fontSize: 14,
           fontWeight: FontWeight.w600,
           letterSpacing: 0.14,
           color: AppColors.onSurface,
         ),
-        labelMedium: GoogleFonts.inter(
+        labelMedium: TextStyle(
+          fontFamily: 'Inter',
           fontSize: 12,
           fontWeight: FontWeight.w600,
           letterSpacing: 0.24,
           color: AppColors.onSurface,
         ),
-        labelSmall: GoogleFonts.inter(
+        labelSmall: TextStyle(
+          fontFamily: 'Inter',
           fontSize: 11,
           fontWeight: FontWeight.w500,
           letterSpacing: 0.33,
           color: AppColors.onSurfaceVariant,
         ),
       ),
-      appBarTheme: AppBarTheme(
-        backgroundColor: AppColors.surfaceContainerLowest.withValues(alpha: 0.9),
+      appBarTheme: const AppBarTheme(
+        backgroundColor: Color(0xE6FFFFFF),
         elevation: 0,
         surfaceTintColor: Colors.transparent,
-        titleTextStyle: GoogleFonts.inter(
+        titleTextStyle: TextStyle(
+          fontFamily: 'Inter',
           fontSize: 18,
           fontWeight: FontWeight.w600,
           color: AppColors.onSurface,
         ),
-        iconTheme: const IconThemeData(color: AppColors.onSurface),
+        iconTheme: IconThemeData(color: AppColors.onSurface),
       ),
       cardTheme: CardThemeData(
         color: AppColors.surfaceContainerLowest,
@@ -191,7 +201,8 @@ class AppTheme {
           borderRadius: BorderRadius.circular(12),
           borderSide: const BorderSide(color: AppColors.primaryContainer, width: 2),
         ),
-        hintStyle: GoogleFonts.inter(
+        hintStyle: const TextStyle(
+          fontFamily: 'Inter',
           fontSize: 14,
           color: AppColors.outlineVariant,
         ),

@@ -75,6 +75,28 @@ class TaskActivity {
   });
 }
 
+class NotificationItem {
+  final String id;
+  final String title;
+  final String message;
+  final String timestamp;
+  final DateTime dateTime;
+  bool isRead;
+  final String? taskId;
+  final String type; // 'reminder', 'due_today', 'overdue', 'completed'
+
+  NotificationItem({
+    required this.id,
+    required this.title,
+    required this.message,
+    required this.timestamp,
+    required this.dateTime,
+    this.isRead = false,
+    this.taskId,
+    this.type = 'reminder',
+  });
+}
+
 class TaskItem {
   final String id;
   String title;
@@ -84,6 +106,7 @@ class TaskItem {
   DateTime dueDate;
   String dueTimeString;
   bool isCompleted;
+  DateTime? completedAt;
   bool isSynced;
   String? attachmentPreview;
   List<TaskAttachment> attachments;
@@ -100,6 +123,7 @@ class TaskItem {
     required this.dueDate,
     required this.dueTimeString,
     this.isCompleted = false,
+    this.completedAt,
     this.isSynced = true,
     this.attachmentPreview,
     List<TaskAttachment>? attachments,
@@ -114,6 +138,42 @@ class TaskItem {
     if (subtasks.isEmpty) return 0.0;
     final done = subtasks.where((s) => s.isCompleted).length;
     return done / subtasks.length;
+  }
+
+  TaskItem copyWith({
+    String? id,
+    String? title,
+    String? description,
+    TaskCategory? category,
+    TaskPriority? priority,
+    DateTime? dueDate,
+    String? dueTimeString,
+    bool? isCompleted,
+    DateTime? completedAt,
+    bool? isSynced,
+    String? attachmentPreview,
+    List<TaskAttachment>? attachments,
+    List<Subtask>? subtasks,
+    List<TaskActivity>? activities,
+    String? estimatedTime,
+  }) {
+    return TaskItem(
+      id: id ?? this.id,
+      title: title ?? this.title,
+      description: description ?? this.description,
+      category: category ?? this.category,
+      priority: priority ?? this.priority,
+      dueDate: dueDate ?? this.dueDate,
+      dueTimeString: dueTimeString ?? this.dueTimeString,
+      isCompleted: isCompleted ?? this.isCompleted,
+      completedAt: completedAt ?? this.completedAt,
+      isSynced: isSynced ?? this.isSynced,
+      attachmentPreview: attachmentPreview ?? this.attachmentPreview,
+      attachments: attachments ?? List.from(this.attachments),
+      subtasks: subtasks ?? List.from(this.subtasks),
+      activities: activities ?? List.from(this.activities),
+      estimatedTime: estimatedTime ?? this.estimatedTime,
+    );
   }
 }
 

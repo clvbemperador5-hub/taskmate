@@ -1,6 +1,9 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
+
 import '../models/task_model.dart';
+import '../services/firebase_service.dart';
 
 enum FocusMode {
   pomodoro('FOCUS TIME', 1500, 'Pomodoro'),
@@ -27,24 +30,71 @@ enum AmbientSound {
 }
 
 class AppState extends ChangeNotifier {
-  bool _isLoggedIn = true;
+  bool _isLoggedIn = false;
   bool get isLoggedIn => _isLoggedIn;
 
   int _currentTabIndex = 0;
   int get currentTabIndex => _currentTabIndex;
+
+  StreamSubscription? _authSubscription;
+  StreamSubscription? _tasksSubscription;
 
   void setTabIndex(int index) {
     _currentTabIndex = index;
     notifyListeners();
   }
 
-  void login(String email, String password) {
-    _isLoggedIn = true;
-    notifyListeners();
+  Future<void> login(String email, String password, {String? name}) async {
+    try {
+      if (FirebaseService.instance.isInitialized) {
+        await FirebaseService.instance.signIn(email, password);
+      }
+    } catch (e) {
+      debugPrint('Firebase login exception: $e');
+      rethrow;
+    } finally {
+      _isLoggedIn = true;
+      if (name != null && name.trim().isNotEmpty) {
+        _user.name = name.trim();
+      }
+      _user.email = email.trim();
+      notifyListeners();
+    }
   }
 
-  void logout() {
+  Future<void> register(String name, String email, String password) async {
+    try {
+      if (FirebaseService.instance.isInitialized) {
+        await FirebaseService.instance.register(name, email, password);
+      }
+    } catch (e) {
+      debugPrint('Firebase register exception: $e');
+      rethrow;
+    } finally {
+      _isLoggedIn = true;
+      _user.name = name.trim();
+      _user.email = email.trim();
+      notifyListeners();
+    }
+  }
+
+  Future<void> sendPasswordReset(String email) async {
+    if (FirebaseService.instance.isInitialized) {
+      await FirebaseService.instance.sendPasswordReset(email);
+    }
+  }
+
+  Future<void> logout() async {
+    try {
+      if (FirebaseService.instance.isInitialized) {
+        await FirebaseService.instance.signOut();
+      }
+    } catch (e) {
+      debugPrint('Firebase logout exception: $e');
+    }
     _isLoggedIn = false;
+    _tasksSubscription?.cancel();
+    _tasksSubscription = null;
     notifyListeners();
   }
 
@@ -79,11 +129,19 @@ class AppState extends ChangeNotifier {
     if (pushNotificationsEnabled != null) {
       _user.pushNotificationsEnabled = pushNotificationsEnabled;
     }
+
+    final uid = FirebaseService.instance.currentUser?.uid;
+    if (uid != null) {
+      FirebaseService.instance.saveUserProfile(uid, _user).catchError((e) {
+        debugPrint('Firestore saveUserProfile error: $e');
+      });
+    }
+
     notifyListeners();
   }
 
   // Tasks List
-  final List<TaskItem> _tasks = [
+  List<TaskItem> _tasks = [
     TaskItem(
       id: 'task-1',
       title: 'Review Capstone Project Proposal',
@@ -93,13 +151,22 @@ class AppState extends ChangeNotifier {
       dueDate: DateTime(2026, 11, 7, 16, 15),
       dueTimeString: '4:15 PM',
       isCompleted: true,
+      completedAt: DateTime(2026, 11, 7, 16, 15),
       estimatedTime: '45m',
       attachments: [
         TaskAttachment(name: 'proposal_draft.pdf', size: '2.4 MB', type: 'pdf'),
       ],
       subtasks: [
-        Subtask(id: 'st-1', title: 'Check literature citations', isCompleted: true),
-        Subtask(id: 'st-2', title: 'Verify system requirement matrix', isCompleted: true),
+        Subtask(
+          id: 'st-1',
+          title: 'Check literature citations',
+          isCompleted: true,
+        ),
+        Subtask(
+          id: 'st-2',
+          title: 'Verify system requirement matrix',
+          isCompleted: true,
+        ),
       ],
       activities: [
         TaskActivity(
@@ -122,19 +189,40 @@ class AppState extends ChangeNotifier {
       estimatedTime: '2h',
       attachments: [
         TaskAttachment(name: 'schema_v2.json', size: '142 KB', type: 'json'),
-        TaskAttachment(name: 'architecture_diagram.png', size: '1.2 MB', type: 'image'),
+        TaskAttachment(
+          name: 'architecture_diagram.png',
+          size: '1.2 MB',
+          type: 'image',
+        ),
       ],
       subtasks: [
-        Subtask(id: 'st-1', title: 'Draft Firestore security rules for users collection', isCompleted: true),
-        Subtask(id: 'st-2', title: 'Test rules in local emulator suite', isCompleted: false),
-        Subtask(id: 'st-3', title: 'Deploy to production & sync schema models', isCompleted: false),
-        Subtask(id: 'st-4', title: 'Review validation benchmarks', isCompleted: false),
+        Subtask(
+          id: 'st-1',
+          title: 'Draft Firestore security rules for users collection',
+          isCompleted: true,
+        ),
+        Subtask(
+          id: 'st-2',
+          title: 'Test rules in local emulator suite',
+          isCompleted: false,
+        ),
+        Subtask(
+          id: 'st-3',
+          title: 'Deploy to production & sync schema models',
+          isCompleted: false,
+        ),
+        Subtask(
+          id: 'st-4',
+          title: 'Review validation benchmarks',
+          isCompleted: false,
+        ),
       ],
       activities: [
         TaskActivity(
           title: 'Updated security rules',
           timestamp: 'Yesterday, 4:12 PM',
-          description: 'Added strict write validations on user profile collection.',
+          description:
+              'Added strict write validations on user profile collection.',
           icon: Icons.edit_note,
         ),
         TaskActivity(
@@ -148,7 +236,8 @@ class AppState extends ChangeNotifier {
     TaskItem(
       id: 'task-3',
       title: 'Prepare Midterm Documentation',
-      description: 'Compile Chapter 1, 2, and 3 manuscripts for adviser review.',
+      description:
+          'Compile Chapter 1, 2, and 3 manuscripts for adviser review.',
       category: TaskCategory.school,
       priority: TaskPriority.medium,
       dueDate: DateTime(2026, 11, 10, 17, 0),
@@ -159,8 +248,16 @@ class AppState extends ChangeNotifier {
         TaskAttachment(name: 'wireframes.png', size: '1.8 MB', type: 'image'),
       ],
       subtasks: [
-        Subtask(id: 'st-1', title: 'Export diagrams to high-res PNG', isCompleted: false),
-        Subtask(id: 'st-2', title: 'Format references APA 7th style', isCompleted: false),
+        Subtask(
+          id: 'st-1',
+          title: 'Export diagrams to high-res PNG',
+          isCompleted: false,
+        ),
+        Subtask(
+          id: 'st-2',
+          title: 'Format references APA 7th style',
+          isCompleted: false,
+        ),
       ],
       activities: [
         TaskActivity(
@@ -174,7 +271,8 @@ class AppState extends ChangeNotifier {
     TaskItem(
       id: 'task-4',
       title: 'Weekly Team Standup Meeting',
-      description: 'Discuss sprint progress and assign development backlog items.',
+      description:
+          'Discuss sprint progress and assign development backlog items.',
       category: TaskCategory.work,
       priority: TaskPriority.low,
       dueDate: DateTime(2026, 11, 11, 10, 0),
@@ -183,7 +281,11 @@ class AppState extends ChangeNotifier {
       estimatedTime: '30m',
       attachments: [],
       subtasks: [
-        Subtask(id: 'st-1', title: 'Summarize week commit stats', isCompleted: false),
+        Subtask(
+          id: 'st-1',
+          title: 'Summarize week commit stats',
+          isCompleted: false,
+        ),
       ],
       activities: [
         TaskActivity(
@@ -202,23 +304,205 @@ class AppState extends ChangeNotifier {
   int get completedTasksCount => _tasks.where((t) => t.isCompleted).length;
   int get pendingTasksCount => _tasks.where((t) => !t.isCompleted).length;
   double get completionPercentage =>
-      totalTasksCount > 0 ? (completedTasksCount / totalTasksCount) * 100 : 0;
+      totalTasksCount > 0 ? (completedTasksCount / totalTasksCount) * 100 : 0.0;
 
   void toggleTaskCompletion(String taskId) {
     final index = _tasks.indexWhere((t) => t.id == taskId);
     if (index != -1) {
-      _tasks[index].isCompleted = !_tasks[index].isCompleted;
+      final task = _tasks[index];
+      final newStatus = !task.isCompleted;
+      task.isCompleted = newStatus;
+      task.completedAt = newStatus ? DateTime.now() : null;
+
+      task.activities.insert(
+        0,
+        TaskActivity(
+          title: newStatus ? 'Marked Completed' : 'Reopened Task',
+          timestamp: 'Just now',
+          description: newStatus
+              ? 'Marked as completed by ${user.name}'
+              : 'Reopened by ${user.name}',
+          icon: newStatus ? Icons.check_circle : Icons.refresh,
+        ),
+      );
+
+      final uid = FirebaseService.instance.currentUser?.uid;
+      if (uid != null) {
+        FirebaseService.instance.toggleTaskCompletion(uid, taskId, newStatus).catchError((e) {
+          debugPrint('Firestore toggleTaskCompletion error: $e');
+        });
+      }
+
+      // Add notification for completion
+      if (newStatus) {
+        addNotification(
+          NotificationItem(
+            id: 'notif-${DateTime.now().millisecondsSinceEpoch}',
+            title: 'Task Completed!',
+            message: '"${task.title}" has been marked as finished.',
+            timestamp: 'Just now',
+            dateTime: DateTime.now(),
+            taskId: task.id,
+            type: 'completed',
+            isRead: false,
+          ),
+        );
+      }
+
       notifyListeners();
     }
   }
 
   void addTask(TaskItem task) {
     _tasks.insert(0, task);
+
+    final uid = FirebaseService.instance.currentUser?.uid;
+    if (uid != null) {
+      FirebaseService.instance.saveTask(uid, task).catchError((e) {
+        debugPrint('Firestore saveTask error: $e');
+      });
+    }
+
+    // Notification for creation
+    addNotification(
+      NotificationItem(
+        id: 'notif-${DateTime.now().millisecondsSinceEpoch}',
+        title: 'New Task Created',
+        message:
+            '"${task.title}" was added to your ${task.category.label} schedule.',
+        timestamp: 'Just now',
+        dateTime: DateTime.now(),
+        taskId: task.id,
+        type: 'reminder',
+        isRead: false,
+      ),
+    );
     notifyListeners();
+  }
+
+  void updateTask(TaskItem updatedTask) {
+    final index = _tasks.indexWhere((t) => t.id == updatedTask.id);
+    if (index != -1) {
+      updatedTask.activities.insert(
+        0,
+        TaskActivity(
+          title: 'Task Edited',
+          timestamp: 'Just now',
+          description: 'Updated details by ${user.name}',
+          icon: Icons.edit_note,
+        ),
+      );
+      _tasks[index] = updatedTask;
+
+      final uid = FirebaseService.instance.currentUser?.uid;
+      if (uid != null) {
+        FirebaseService.instance.updateTask(uid, updatedTask).catchError((e) {
+          debugPrint('Firestore updateTask error: $e');
+        });
+      }
+
+      notifyListeners();
+    }
   }
 
   void deleteTask(String taskId) {
     _tasks.removeWhere((t) => t.id == taskId);
+    if (_selectedFocusTaskId == taskId) {
+      if (_tasks.isNotEmpty) {
+        _selectedFocusTaskId = _tasks.first.id;
+      }
+    }
+    // Also remove notifications linked to deleted task
+    _notifications.removeWhere((n) => n.taskId == taskId);
+
+    final uid = FirebaseService.instance.currentUser?.uid;
+    if (uid != null) {
+      FirebaseService.instance.deleteTask(uid, taskId).catchError((e) {
+        debugPrint('Firestore deleteTask error: $e');
+      });
+    }
+
+    notifyListeners();
+  }
+
+  // Notifications State
+  final List<NotificationItem> _notifications = [
+    NotificationItem(
+      id: 'notif-1',
+      title: 'Upcoming Task Reminder',
+      message:
+          '"Configure Cloud Firestore Database" is due tonight at 11:59 PM.',
+      timestamp: '10 mins ago',
+      dateTime: DateTime(2026, 11, 8, 15, 0),
+      taskId: 'task-2',
+      type: 'reminder',
+      isRead: false,
+    ),
+    NotificationItem(
+      id: 'notif-2',
+      title: 'Tasks Due Today',
+      message: 'You have 1 pending task scheduled for completion today.',
+      timestamp: '2 hours ago',
+      dateTime: DateTime(2026, 11, 8, 13, 0),
+      taskId: 'task-2',
+      type: 'due_today',
+      isRead: false,
+    ),
+    NotificationItem(
+      id: 'notif-3',
+      title: 'Task Completed',
+      message: '"Review Capstone Project Proposal" has been verified and marked finished.',
+      timestamp: 'Yesterday',
+      dateTime: DateTime(2026, 11, 7, 16, 20),
+      taskId: 'task-1',
+      type: 'completed',
+      isRead: true,
+    ),
+    NotificationItem(
+      id: 'notif-4',
+      title: 'Weekly Standup Reminder',
+      message:
+          'Prepare sprint progress items before the upcoming team meeting.',
+      timestamp: '2 days ago',
+      dateTime: DateTime(2026, 11, 6, 9, 0),
+      taskId: 'task-4',
+      type: 'reminder',
+      isRead: true,
+    ),
+  ];
+
+  List<NotificationItem> get notifications => List.unmodifiable(_notifications);
+
+  int get unreadNotificationsCount =>
+      _notifications.where((n) => !n.isRead).length;
+
+  void addNotification(NotificationItem item) {
+    _notifications.insert(0, item);
+    notifyListeners();
+  }
+
+  void markNotificationAsRead(String id) {
+    final index = _notifications.indexWhere((n) => n.id == id);
+    if (index != -1 && !_notifications[index].isRead) {
+      _notifications[index].isRead = true;
+      notifyListeners();
+    }
+  }
+
+  void markAllNotificationsAsRead() {
+    for (final notif in _notifications) {
+      notif.isRead = true;
+    }
+    notifyListeners();
+  }
+
+  void deleteNotification(String id) {
+    _notifications.removeWhere((n) => n.id == id);
+    notifyListeners();
+  }
+
+  void clearAllNotifications() {
+    _notifications.clear();
     notifyListeners();
   }
 
@@ -263,10 +547,12 @@ class AppState extends ChangeNotifier {
       // Search query
       if (_searchQuery.isNotEmpty) {
         final matchesTitle = task.title.toLowerCase().contains(_searchQuery);
-        final matchesDesc =
-            task.description.toLowerCase().contains(_searchQuery);
-        final matchesCategory =
-            task.category.label.toLowerCase().contains(_searchQuery);
+        final matchesDesc = task.description.toLowerCase().contains(
+          _searchQuery,
+        );
+        final matchesCategory = task.category.label.toLowerCase().contains(
+          _searchQuery,
+        );
         if (!matchesTitle && !matchesDesc && !matchesCategory) {
           return false;
         }
@@ -295,7 +581,8 @@ class AppState extends ChangeNotifier {
 
   List<TaskItem> get scheduleFilteredTasks {
     return _tasks.where((task) {
-      final isSameDay = task.dueDate.year == _selectedDate.year &&
+      final isSameDay =
+          task.dueDate.year == _selectedDate.year &&
           task.dueDate.month == _selectedDate.month &&
           task.dueDate.day == _selectedDate.day;
 
@@ -324,6 +611,17 @@ class AppState extends ChangeNotifier {
   String get selectedFocusTaskId => _selectedFocusTaskId;
 
   TaskItem get selectedFocusTask {
+    if (_tasks.isEmpty) {
+      return TaskItem(
+        id: 'fallback-task',
+        title: 'General Focus Session',
+        description: 'Focus timer active without attached task.',
+        category: TaskCategory.general,
+        priority: TaskPriority.medium,
+        dueDate: DateTime.now(),
+        dueTimeString: 'Now',
+      );
+    }
     return _tasks.firstWhere(
       (t) => t.id == _selectedFocusTaskId,
       orElse: () => _tasks.first,
@@ -338,6 +636,64 @@ class AppState extends ChangeNotifier {
 
   AppState() {
     _remainingSeconds = _focusMode.totalSeconds;
+    _initFirebaseListeners();
+  }
+
+  void _initFirebaseListeners() {
+    // Check current auth status immediately
+    final current = FirebaseService.instance.currentUser;
+    if (current != null) {
+      _handleUserLoggedIn(current.uid, current.email ?? '', current.displayName);
+    }
+
+    _authSubscription = FirebaseService.instance.authStateChanges.listen((user) {
+      if (user != null) {
+        _handleUserLoggedIn(user.uid, user.email ?? '', user.displayName);
+      } else {
+        _isLoggedIn = false;
+        _tasksSubscription?.cancel();
+        _tasksSubscription = null;
+        notifyListeners();
+      }
+    });
+  }
+
+  void _handleUserLoggedIn(String uid, String email, String? displayName) async {
+    _isLoggedIn = true;
+    _user.email = email;
+    if (displayName != null && displayName.isNotEmpty) {
+      _user.name = displayName;
+    }
+
+    // Fetch profile from Firestore
+    final profile = await FirebaseService.instance.fetchUserProfile(uid);
+    if (profile != null) {
+      _user.name = profile.name;
+      _user.email = profile.email;
+      _user.institution = profile.institution;
+      _user.defaultCategory = profile.defaultCategory;
+      _user.dailyFocusTarget = profile.dailyFocusTarget;
+      _user.completedTasksCount = profile.completedTasksCount;
+      _user.onTimePercentage = profile.onTimePercentage;
+      _user.focusHours = profile.focusHours;
+      _user.streakDays = profile.streakDays;
+    }
+
+    // Subscribe to Firestore Tasks
+    _tasksSubscription?.cancel();
+    _tasksSubscription = FirebaseService.instance.streamTasks(uid).listen((remoteTasks) {
+      if (remoteTasks.isNotEmpty) {
+        _tasks = List.from(remoteTasks);
+        notifyListeners();
+      } else if (_tasks.isNotEmpty) {
+        // Seed initial demo tasks to user's new Firestore account
+        for (final t in _tasks) {
+          FirebaseService.instance.saveTask(uid, t);
+        }
+      }
+    });
+
+    notifyListeners();
   }
 
   void setFocusTask(String taskId) {
@@ -413,11 +769,18 @@ class AppState extends ChangeNotifier {
   void toggleSubtask(String taskId, String subtaskId) {
     final taskIndex = _tasks.indexWhere((t) => t.id == taskId);
     if (taskIndex != -1) {
-      final stIndex =
-          _tasks[taskIndex].subtasks.indexWhere((s) => s.id == subtaskId);
+      final stIndex = _tasks[taskIndex].subtasks.indexWhere(
+        (s) => s.id == subtaskId,
+      );
       if (stIndex != -1) {
         _tasks[taskIndex].subtasks[stIndex].isCompleted =
             !_tasks[taskIndex].subtasks[stIndex].isCompleted;
+
+        final uid = FirebaseService.instance.currentUser?.uid;
+        if (uid != null) {
+          FirebaseService.instance.updateTask(uid, _tasks[taskIndex]);
+        }
+
         notifyListeners();
       }
     }
@@ -426,6 +789,8 @@ class AppState extends ChangeNotifier {
   @override
   void dispose() {
     _timer?.cancel();
+    _authSubscription?.cancel();
+    _tasksSubscription?.cancel();
     super.dispose();
   }
 }
@@ -438,8 +803,8 @@ class AppStateProvider extends InheritedNotifier<AppState> {
   }) : super(notifier: notifier);
 
   static AppState of(BuildContext context) {
-    final provider =
-        context.dependOnInheritedWidgetOfExactType<AppStateProvider>();
+    final provider = context
+        .dependOnInheritedWidgetOfExactType<AppStateProvider>();
     assert(provider != null, 'No AppStateProvider found in context');
     return provider!.notifier!;
   }

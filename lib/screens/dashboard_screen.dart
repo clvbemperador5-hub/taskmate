@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+
 import '../models/task_model.dart';
 import '../state/app_state.dart';
 import '../theme/app_theme.dart';
 import 'add_task_screen.dart';
+import 'notifications_screen.dart';
 import 'task_details_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -21,11 +23,66 @@ class _DashboardScreenState extends State<DashboardScreen> {
     super.dispose();
   }
 
+  void _confirmDeleteTask(BuildContext context, AppState state, TaskItem task) {
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          backgroundColor: AppColors.surfaceContainerLowest,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          title: const Row(
+            children: [
+              Icon(Icons.delete_outline, color: AppColors.error),
+              SizedBox(width: 8),
+              Text(
+                'Delete Task?',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+              ),
+            ],
+          ),
+          content: Text(
+            'Are you sure you want to permanently delete "${task.title}"? This cannot be undone.',
+            style: const TextStyle(
+              fontSize: 14,
+              color: AppColors.onSurfaceVariant,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                state.deleteTask(task.id);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Deleted "${task.title}"'),
+                    duration: const Duration(seconds: 2),
+                  ),
+                );
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.error,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Delete'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = AppStateProvider.of(context);
     final theme = Theme.of(context);
     final filteredTasks = state.filteredTasks;
+    final unreadCount = state.unreadNotificationsCount;
 
     return Scaffold(
       backgroundColor: AppColors.surface,
@@ -84,13 +141,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ],
                   ),
                   const Spacer(),
-                  // Notifications
+                  // Notifications button with live unread badge
                   IconButton(
                     onPressed: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('All tasks are up to date and synchronized.'),
-                          duration: Duration(seconds: 2),
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const NotificationsScreen(),
                         ),
                       );
                     },
@@ -101,18 +157,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           color: AppColors.onSurfaceVariant,
                           size: 24,
                         ),
-                        Positioned(
-                          right: 1,
-                          top: 1,
-                          child: Container(
-                            width: 8,
-                            height: 8,
-                            decoration: const BoxDecoration(
-                              color: AppColors.error,
-                              shape: BoxShape.circle,
+                        if (unreadCount > 0)
+                          Positioned(
+                            right: 0,
+                            top: 0,
+                            child: Container(
+                              padding: const EdgeInsets.all(2),
+                              decoration: const BoxDecoration(
+                                color: AppColors.error,
+                                shape: BoxShape.circle,
+                              ),
+                              constraints: const BoxConstraints(
+                                minWidth: 8,
+                                minHeight: 8,
+                              ),
                             ),
                           ),
-                        ),
                       ],
                     ),
                   ),
@@ -128,15 +188,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         shape: BoxShape.circle,
                         color: AppColors.primaryFixed,
                         border: Border.all(
-                          color: AppColors.primaryContainer.withValues(alpha: 0.3),
+                          color: AppColors.primaryContainer.withValues(
+                            alpha: 0.3,
+                          ),
                           width: 2,
                         ),
                       ),
-                      child: const Center(
+                      child: Center(
                         child: Text(
-                          'AR',
-                          style: TextStyle(
-                            fontSize: 13,
+                          state.user.name.isNotEmpty
+                              ? state.user.name
+                                    .split(' ')
+                                    .map((n) => n.isNotEmpty ? n[0] : '')
+                                    .take(2)
+                                    .join()
+                                    .toUpperCase()
+                              : 'TM',
+                          style: const TextStyle(
+                            fontSize: 12,
                             fontWeight: FontWeight.w700,
                             color: AppColors.primary,
                           ),
@@ -173,16 +242,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
           if (filteredTasks.isEmpty)
             _buildEmptyState(context)
           else
-            ...filteredTasks.map((task) => _buildTaskCard(context, state, task)),
+            ...filteredTasks.map(
+              (task) => _buildTaskCard(context, state, task),
+            ),
 
           const SizedBox(height: 80), // Padding for floating button and nav bar
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () {
-          Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const AddTaskScreen()),
-          );
+          Navigator.of(context)
+              .push(MaterialPageRoute(builder: (_) => const AddTaskScreen()));
         },
         backgroundColor: AppColors.primaryContainer,
         foregroundColor: AppColors.onPrimary,
@@ -200,6 +270,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final completed = state.completedTasksCount;
     final total = state.totalTasksCount;
     final percent = total > 0 ? ((completed / total) * 100).round() : 0;
+    final pending = state.pendingTasksCount;
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -233,22 +304,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.white.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(999),
                 ),
-                child: const Row(
+                child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    CircleAvatar(
+                    const CircleAvatar(
                       radius: 3,
                       backgroundColor: Colors.white,
                     ),
-                    SizedBox(width: 5),
+                    const SizedBox(width: 5),
                     Text(
-                      'Nov 7',
-                      style: TextStyle(
+                      '$pending Pending',
+                      style: const TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
                         color: Colors.white,
@@ -261,7 +335,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
           const SizedBox(height: 6),
           Text(
-            'You have completed $completed of $total daily tasks ($percent%).',
+            'You have completed $completed of $total tasks ($percent%).',
             style: TextStyle(
               fontSize: 13,
               color: Colors.white.withValues(alpha: 0.9),
@@ -293,7 +367,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                'Keep the momentum going!',
+                total == 0
+                    ? 'Create your first task below!'
+                    : (percent == 100
+                          ? 'All tasks complete! 🎉'
+                          : 'Keep the momentum going!'),
                 style: TextStyle(
                   fontSize: 12,
                   color: Colors.white.withValues(alpha: 0.85),
@@ -331,7 +409,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         controller: _searchController,
         onChanged: (val) => state.setSearchQuery(val),
         decoration: InputDecoration(
-          hintText: 'Search tasks by title, notes, or tag...',
+          hintText: 'Search tasks by title, notes, or category...',
           prefixIcon: const Icon(
             Icons.search,
             color: AppColors.onSurfaceVariant,
@@ -339,14 +417,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
           suffixIcon: state.searchQuery.isNotEmpty
               ? IconButton(
-                  icon: const Icon(Icons.cancel, size: 18, color: AppColors.outline),
+                  icon: const Icon(
+                    Icons.cancel,
+                    size: 18,
+                    color: AppColors.outline,
+                  ),
                   onPressed: () {
                     _searchController.clear();
                     state.setSearchQuery('');
                   },
                 )
               : null,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 12,
+          ),
           border: InputBorder.none,
           enabledBorder: InputBorder.none,
           focusedBorder: InputBorder.none,
@@ -371,7 +456,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
               borderRadius: BorderRadius.circular(999),
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 180),
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
                 decoration: BoxDecoration(
                   color: isSelected
                       ? AppColors.primary
@@ -390,7 +478,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
-                    color: isSelected ? Colors.white : AppColors.onSurfaceVariant,
+                    color: isSelected
+                        ? Colors.white
+                        : AppColors.onSurfaceVariant,
                   ),
                 ),
               ),
@@ -421,12 +511,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
               child: Container(
                 padding: const EdgeInsets.symmetric(vertical: 8),
                 decoration: BoxDecoration(
-                  color: isAll ? AppColors.surfaceContainerLowest : Colors.transparent,
+                  color: isAll
+                      ? AppColors.surfaceContainerLowest
+                      : Colors.transparent,
                   borderRadius: BorderRadius.circular(10),
                   boxShadow: isAll
                       ? [
                           BoxShadow(
-                            color: const Color(0xFF1E1B4B).withValues(alpha: 0.06),
+                            color: const Color(0xFF1E1B4B)
+                                .withValues(alpha: 0.06),
                             blurRadius: 6,
                             offset: const Offset(0, 2),
                           ),
@@ -439,7 +532,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
-                      color: isAll ? AppColors.onSurface : AppColors.onSurfaceVariant,
+                      color: isAll
+                          ? AppColors.onSurface
+                          : AppColors.onSurfaceVariant,
                     ),
                   ),
                 ),
@@ -454,12 +549,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
               child: Container(
                 padding: const EdgeInsets.symmetric(vertical: 8),
                 decoration: BoxDecoration(
-                  color: !isAll ? AppColors.surfaceContainerLowest : Colors.transparent,
+                  color: !isAll
+                      ? AppColors.surfaceContainerLowest
+                      : Colors.transparent,
                   borderRadius: BorderRadius.circular(10),
                   boxShadow: !isAll
                       ? [
                           BoxShadow(
-                            color: const Color(0xFF1E1B4B).withValues(alpha: 0.06),
+                            color: const Color(0xFF1E1B4B)
+                                .withValues(alpha: 0.06),
                             blurRadius: 6,
                             offset: const Offset(0, 2),
                           ),
@@ -472,7 +570,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
-                      color: !isAll ? AppColors.onSurface : AppColors.onSurfaceVariant,
+                      color: !isAll
+                          ? AppColors.onSurface
+                          : AppColors.onSurfaceVariant,
                     ),
                   ),
                 ),
@@ -506,10 +606,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             // Left Priority Indicator Strip
-            Container(
-              width: 5,
-              color: task.priority.borderColor,
-            ),
+            Container(width: 5, color: task.priority.borderColor),
             // Card Content
             Expanded(
               child: InkWell(
@@ -567,16 +664,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                     Expanded(
                                       child: Text(
                                         task.title,
-                                        style: theme.textTheme.headlineSmall?.copyWith(
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.w600,
-                                          decoration: task.isCompleted
-                                              ? TextDecoration.lineThrough
-                                              : TextDecoration.none,
-                                          color: task.isCompleted
-                                              ? AppColors.outline
-                                              : AppColors.onSurface,
-                                        ),
+                                        style: theme.textTheme.headlineSmall
+                                            ?.copyWith(
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.w600,
+                                              decoration: task.isCompleted
+                                                  ? TextDecoration.lineThrough
+                                                  : TextDecoration.none,
+                                              color: task.isCompleted
+                                                  ? AppColors.outline
+                                                  : AppColors.onSurface,
+                                            ),
                                       ),
                                     ),
                                     // More options popup
@@ -589,8 +687,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                       padding: EdgeInsets.zero,
                                       constraints: const BoxConstraints(),
                                       onSelected: (val) {
-                                        if (val == 'delete') {
-                                          state.deleteTask(task.id);
+                                        if (val == 'edit') {
+                                          Navigator.of(context).push(
+                                            MaterialPageRoute(
+                                              builder: (_) => AddTaskScreen(
+                                                editingTask: task,
+                                              ),
+                                            ),
+                                          );
+                                        } else if (val == 'delete') {
+                                          _confirmDeleteTask(
+                                            context,
+                                            state,
+                                            task,
+                                          );
                                         } else if (val == 'focus') {
                                           state.setFocusTask(task.id);
                                           state.setTabIndex(2);
@@ -598,10 +708,28 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                       },
                                       itemBuilder: (_) => [
                                         const PopupMenuItem(
+                                          value: 'edit',
+                                          child: Row(
+                                            children: [
+                                              Icon(
+                                                Icons.edit_outlined,
+                                                size: 18,
+                                                color: AppColors.primary,
+                                              ),
+                                              SizedBox(width: 8),
+                                              Text('Edit Task'),
+                                            ],
+                                          ),
+                                        ),
+                                        const PopupMenuItem(
                                           value: 'focus',
                                           child: Row(
                                             children: [
-                                              Icon(Icons.timer, size: 18, color: AppColors.primary),
+                                              Icon(
+                                                Icons.timer,
+                                                size: 18,
+                                                color: AppColors.primary,
+                                              ),
                                               SizedBox(width: 8),
                                               Text('Focus on this'),
                                             ],
@@ -611,7 +739,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                           value: 'delete',
                                           child: Row(
                                             children: [
-                                              Icon(Icons.delete_outline, size: 18, color: AppColors.error),
+                                              Icon(
+                                                Icons.delete_outline,
+                                                size: 18,
+                                                color: AppColors.error,
+                                              ),
                                               SizedBox(width: 8),
                                               Text('Delete'),
                                             ],
@@ -645,7 +777,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         children: [
                           // Category Badge
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 3,
+                            ),
                             decoration: BoxDecoration(
                               color: AppColors.surfaceContainerHigh,
                               borderRadius: BorderRadius.circular(999),
@@ -661,7 +796,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           ),
                           // Priority Badge
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 3,
+                            ),
                             decoration: BoxDecoration(
                               color: task.priority.fillColor,
                               borderRadius: BorderRadius.circular(999),
@@ -697,7 +835,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           // Attachment preview if present
                           if (task.attachments.isNotEmpty)
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 7,
+                                vertical: 2,
+                              ),
                               decoration: BoxDecoration(
                                 color: AppColors.surfaceContainer,
                                 borderRadius: BorderRadius.circular(999),
@@ -712,7 +853,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                   ),
                                   const SizedBox(width: 3),
                                   ConstrainedBox(
-                                    constraints: const BoxConstraints(maxWidth: 110),
+                                    constraints: const BoxConstraints(
+                                      maxWidth: 110,
+                                    ),
                                     child: Text(
                                       task.attachments.first.name,
                                       style: const TextStyle(
@@ -776,10 +919,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           const Text(
             'Try adjusting your search or switching filters to see other tasks.',
             textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 13,
-              color: AppColors.onSurfaceVariant,
-            ),
+            style: TextStyle(fontSize: 13, color: AppColors.onSurfaceVariant),
           ),
         ],
       ),

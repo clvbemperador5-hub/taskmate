@@ -2,6 +2,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../state/app_state.dart';
 import '../theme/app_theme.dart';
+import 'notifications_screen.dart';
 
 class FocusScreen extends StatefulWidget {
   const FocusScreen({super.key});
@@ -126,11 +127,37 @@ class _FocusScreenState extends State<FocusScreen> {
                   ),
                   const Spacer(),
                   IconButton(
-                    onPressed: () {},
-                    icon: const Icon(
-                      Icons.notifications_outlined,
-                      color: AppColors.onSurfaceVariant,
-                      size: 24,
+                    onPressed: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const NotificationsScreen(),
+                        ),
+                      );
+                    },
+                    icon: Stack(
+                      children: [
+                        const Icon(
+                          Icons.notifications_outlined,
+                          color: AppColors.onSurfaceVariant,
+                          size: 24,
+                        ),
+                        if (state.unreadNotificationsCount > 0)
+                          Positioned(
+                            right: 0,
+                            top: 0,
+                            child: Container(
+                              padding: const EdgeInsets.all(2),
+                              decoration: const BoxDecoration(
+                                color: AppColors.error,
+                                shape: BoxShape.circle,
+                              ),
+                              constraints: const BoxConstraints(
+                                minWidth: 8,
+                                minHeight: 8,
+                              ),
+                            ),
+                          ),
+                      ],
                     ),
                   ),
                   GestureDetector(
@@ -146,10 +173,12 @@ class _FocusScreenState extends State<FocusScreen> {
                           width: 2,
                         ),
                       ),
-                      child: const Center(
+                      child: Center(
                         child: Text(
-                          'AR',
-                          style: TextStyle(
+                          state.user.name.isNotEmpty
+                              ? state.user.name.split(' ').map((n) => n.isNotEmpty ? n[0] : '').take(2).join().toUpperCase()
+                              : 'TM',
+                          style: const TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.w700,
                             color: AppColors.primary,

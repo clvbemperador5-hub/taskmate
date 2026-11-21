@@ -1,11 +1,16 @@
 import 'package:flutter/material.dart';
 import 'screens/login_screen.dart';
+import 'services/firebase_service.dart';
 import 'state/app_state.dart';
 import 'theme/app_theme.dart';
 import 'widgets/app_nav_shell.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize Firebase Connection
+  await FirebaseService.instance.initialize();
+
   runApp(const TaskMateApp());
 }
 

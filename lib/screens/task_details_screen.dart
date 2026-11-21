@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import '../models/task_model.dart';
 import '../state/app_state.dart';
 import '../theme/app_theme.dart';
+import 'add_task_screen.dart';
 
 class TaskDetailsScreen extends StatefulWidget {
   final String taskId;
@@ -12,16 +14,209 @@ class TaskDetailsScreen extends StatefulWidget {
 }
 
 class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
+  void _confirmDeleteTask(BuildContext context, AppState state, TaskItem task) {
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          backgroundColor: AppColors.surfaceContainerLowest,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Row(
+            children: [
+              Icon(Icons.delete_outline, color: AppColors.error),
+              SizedBox(width: 8),
+              Text(
+                'Delete Task?',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+              ),
+            ],
+          ),
+          content: Text(
+            'Are you sure you want to permanently delete "${task.title}"? This cannot be undone.',
+            style: const TextStyle(fontSize: 14, color: AppColors.onSurfaceVariant),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                state.deleteTask(task.id);
+                Navigator.pop(context); // Return to task list
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Deleted "${task.title}"'),
+                    duration: const Duration(seconds: 2),
+                  ),
+                );
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.error,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Delete'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _showAddAttachmentDialog(BuildContext context, AppState state, TaskItem task) {
+    final nameCtrl = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          backgroundColor: AppColors.surfaceContainerLowest,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+          title: const Text('Upload Document Attachment', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nameCtrl,
+                decoration: const InputDecoration(
+                  hintText: 'e.g. sprint_retro.pdf',
+                  labelText: 'File Name',
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                final name = nameCtrl.text.trim();
+                if (name.isNotEmpty) {
+                  final newAtt = TaskAttachment(
+                    name: name,
+                    size: '1.8 MB',
+                    type: name.endsWith('.pdf') ? 'pdf' : (name.endsWith('.png') || name.endsWith('.jpg') ? 'image' : 'other'),
+                  );
+                  final updated = task.copyWith(
+                    attachments: [...task.attachments, newAtt],
+                  );
+                  state.updateTask(updated);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Attached "$name"')),
+                  );
+                }
+                Navigator.pop(ctx);
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Attach'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _previewAttachment(BuildContext context, TaskAttachment att) {
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          backgroundColor: AppColors.surfaceContainerLowest,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+          title: Row(
+            children: [
+              Icon(
+                att.type == 'pdf' ? Icons.picture_as_pdf : Icons.image,
+                color: att.type == 'pdf' ? AppColors.error : AppColors.primary,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  att.name,
+                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('File Size: ${att.size}', style: const TextStyle(fontSize: 13)),
+              const SizedBox(height: 6),
+              Text('Format: ${att.type.toUpperCase()}', style: const TextStyle(fontSize: 13)),
+              const SizedBox(height: 12),
+              Container(
+                height: 120,
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceContainer,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        att.type == 'pdf' ? Icons.description : Icons.photo,
+                        size: 40,
+                        color: AppColors.primary,
+                      ),
+                      const SizedBox(height: 6),
+                      const Text(
+                        'Offline File Preview Ready',
+                        style: TextStyle(fontSize: 12, color: AppColors.onSurfaceVariant),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Close'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = AppStateProvider.of(context);
     final theme = Theme.of(context);
 
-    final task = state.tasks.firstWhere(
-      (t) => t.id == widget.taskId,
-      orElse: () => state.tasks.first,
-    );
+    final taskIndex = state.tasks.indexWhere((t) => t.id == widget.taskId);
+    if (taskIndex == -1) {
+      return Scaffold(
+        backgroundColor: AppColors.surface,
+        appBar: AppBar(title: const Text('Task Not Found')),
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Text('This task may have been deleted.'),
+              const SizedBox(height: 12),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Back to Dashboard'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
 
+    final task = state.tasks[taskIndex];
     final completedSubtasks = task.subtasks.where((s) => s.isCompleted).length;
     final totalSubtasks = task.subtasks.length;
     final subtaskRatio = totalSubtasks > 0 ? completedSubtasks / totalSubtasks : 0.0;
@@ -85,10 +280,12 @@ class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
                           width: 2,
                         ),
                       ),
-                      child: const Center(
+                      child: Center(
                         child: Text(
-                          'AR',
-                          style: TextStyle(
+                          state.user.name.isNotEmpty
+                              ? state.user.name.split(' ').map((n) => n.isNotEmpty ? n[0] : '').take(2).join().toUpperCase()
+                              : 'TM',
+                          style: const TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w700,
                             color: AppColors.primary,
@@ -110,21 +307,21 @@ class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Row(
+              Row(
                 children: [
-                  Icon(Icons.folder_open, size: 16, color: AppColors.primary),
-                  SizedBox(width: 4),
+                  const Icon(Icons.folder_open, size: 16, color: AppColors.primary),
+                  const SizedBox(width: 4),
                   Text(
-                    'Projects',
-                    style: TextStyle(fontSize: 12, color: AppColors.onSurfaceVariant),
+                    task.category.label,
+                    style: const TextStyle(fontSize: 12, color: AppColors.onSurfaceVariant),
                   ),
-                  Icon(Icons.chevron_right, size: 14, color: AppColors.onSurfaceVariant),
+                  const Icon(Icons.chevron_right, size: 14, color: AppColors.onSurfaceVariant),
                   Text(
-                    'Backend Arch',
+                    task.priority.label,
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w700,
-                      color: AppColors.primary,
+                      color: task.priority.textColor,
                     ),
                   ),
                 ],
@@ -132,17 +329,20 @@ class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
               PopupMenuButton<String>(
                 icon: const Icon(Icons.more_vert, size: 20, color: AppColors.onSurfaceVariant),
                 onSelected: (val) {
-                  if (val == 'delete') {
-                    state.deleteTask(task.id);
-                    Navigator.pop(context);
+                  if (val == 'edit') {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => AddTaskScreen(editingTask: task),
+                      ),
+                    );
+                  } else if (val == 'delete') {
+                    _confirmDeleteTask(context, state, task);
                   } else if (val == 'focus') {
                     state.setFocusTask(task.id);
                     state.setTabIndex(2);
                     Navigator.pop(context);
-                  } else {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Action $val simulated.')),
-                    );
+                  } else if (val == 'toggle') {
+                    state.toggleTaskCompletion(task.id);
                   }
                 },
                 itemBuilder: (_) => [
@@ -166,23 +366,17 @@ class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
                       ],
                     ),
                   ),
-                  const PopupMenuItem(
-                    value: 'duplicate',
+                  PopupMenuItem(
+                    value: 'toggle',
                     child: Row(
                       children: [
-                        Icon(Icons.content_copy, size: 18, color: AppColors.onSurfaceVariant),
-                        SizedBox(width: 10),
-                        Text('Duplicate Task'),
-                      ],
-                    ),
-                  ),
-                  const PopupMenuItem(
-                    value: 'share',
-                    child: Row(
-                      children: [
-                        Icon(Icons.share, size: 18, color: AppColors.tertiary),
-                        SizedBox(width: 10),
-                        Text('Share Link'),
+                        Icon(
+                          task.isCompleted ? Icons.refresh : Icons.check_circle_outline,
+                          size: 18,
+                          color: AppColors.primary,
+                        ),
+                        const SizedBox(width: 10),
+                        Text(task.isCompleted ? 'Reopen Task' : 'Mark Completed'),
                       ],
                     ),
                   ),
@@ -267,7 +461,7 @@ class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
                           Icon(Icons.cloud_done, size: 14, color: AppColors.tertiary),
                           SizedBox(width: 4),
                           Text(
-                            'Firestore Synced',
+                            'Synced to Storage',
                             style: TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.w600,
@@ -325,7 +519,9 @@ class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  task.description,
+                  task.description.isNotEmpty
+                      ? task.description
+                      : 'No additional notes provided for this task.',
                   style: const TextStyle(
                     fontSize: 14,
                     color: AppColors.onSurfaceVariant,
@@ -369,12 +565,8 @@ class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
                                     style: TextStyle(fontSize: 11, color: AppColors.onSurfaceVariant),
                                   ),
                                   Text(
-                                    task.dueTimeString,
-                                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
-                                  ),
-                                  const Text(
-                                    'Academic Deadline',
-                                    style: TextStyle(fontSize: 10, color: AppColors.error),
+                                    '${task.dueDate.month}/${task.dueDate.day} · ${task.dueTimeString}',
+                                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
                                   ),
                                 ],
                               ),
@@ -416,12 +608,8 @@ class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
                                     style: TextStyle(fontSize: 11, color: AppColors.onSurfaceVariant),
                                   ),
                                   Text(
-                                    '3h before',
-                                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
-                                  ),
-                                  Text(
-                                    'Via Push Alert',
-                                    style: TextStyle(fontSize: 10, color: AppColors.onSurfaceVariant),
+                                    'Active',
+                                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
                                   ),
                                 ],
                               ),
@@ -584,7 +772,7 @@ class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
                 ],
               ),
               TextButton.icon(
-                onPressed: () {},
+                onPressed: () => _showAddAttachmentDialog(context, state, task),
                 icon: const Icon(Icons.add, size: 16),
                 label: const Text('Upload'),
                 style: TextButton.styleFrom(foregroundColor: AppColors.primary),
@@ -592,78 +780,100 @@ class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
             ],
           ),
           const SizedBox(height: 8),
-          ...task.attachments.map((att) {
-            return Container(
-              margin: const EdgeInsets.only(bottom: 8),
-              padding: const EdgeInsets.all(12),
+          if (task.attachments.isEmpty)
+            Container(
+              padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 color: AppColors.surfaceContainerLowest,
                 borderRadius: BorderRadius.circular(14),
-                boxShadow: [
-                  BoxShadow(
-                    color: const Color(0xFF1E1B4B).withValues(alpha: 0.04),
-                    blurRadius: 6,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
               ),
-              child: Row(
-                children: [
-                  Container(
-                    width: 36,
-                    height: 36,
-                    decoration: BoxDecoration(
-                      color: att.type == 'pdf'
-                          ? AppColors.errorContainer
-                          : AppColors.surfaceContainerHigh,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Icon(
-                      att.type == 'pdf'
-                          ? Icons.picture_as_pdf
-                          : att.type == 'image'
-                              ? Icons.image
-                              : Icons.data_object,
-                      size: 20,
-                      color: att.type == 'pdf' ? AppColors.error : AppColors.primary,
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          att.name,
-                          style: const TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.onSurface,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        Text(
-                          '${att.size} • Verified',
-                          style: const TextStyle(
-                            fontSize: 11,
-                            color: AppColors.onSurfaceVariant,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  IconButton(
-                    onPressed: () {},
-                    icon: const Icon(Icons.visibility_outlined, size: 18),
-                  ),
-                  IconButton(
-                    onPressed: () {},
-                    icon: const Icon(Icons.download_outlined, size: 18),
-                  ),
-                ],
+              child: const Center(
+                child: Text(
+                  'No attachments yet. Tap Upload to attach files.',
+                  style: TextStyle(fontSize: 12, color: AppColors.onSurfaceVariant),
+                ),
               ),
-            );
-          }),
+            )
+          else
+            ...task.attachments.map((att) {
+              return Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceContainerLowest,
+                  borderRadius: BorderRadius.circular(14),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF1E1B4B).withValues(alpha: 0.04),
+                      blurRadius: 6,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color: att.type == 'pdf'
+                            ? AppColors.errorContainer
+                            : AppColors.surfaceContainerHigh,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Icon(
+                        att.type == 'pdf'
+                            ? Icons.picture_as_pdf
+                            : att.type == 'image'
+                                ? Icons.image
+                                : Icons.data_object,
+                        size: 20,
+                        color: att.type == 'pdf' ? AppColors.error : AppColors.primary,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            att.name,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.onSurface,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          Text(
+                            '${att.size} • Verified',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: AppColors.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () => _previewAttachment(context, att),
+                      icon: const Icon(Icons.visibility_outlined, size: 18),
+                    ),
+                    IconButton(
+                      onPressed: () {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Downloading "${att.name}" to device storage.'),
+                            duration: const Duration(seconds: 2),
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.download_outlined, size: 18),
+                    ),
+                  ],
+                ),
+              );
+            }),
           const SizedBox(height: 16),
 
           // Activity & History Audit Trail
@@ -701,26 +911,19 @@ class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
               ],
             ),
             child: Column(
-              children: [
-                _buildTimelineItem(
-                  icon: Icons.edit_note,
-                  iconBg: AppColors.primaryFixed,
-                  iconColor: AppColors.primary,
-                  title: 'Updated security rules',
-                  time: 'Yesterday, 4:12 PM',
-                  desc: 'Added strict write validations on user profile collection.',
-                  isLast: false,
-                ),
-                _buildTimelineItem(
-                  icon: Icons.add_task,
-                  iconBg: AppColors.secondaryFixed,
-                  iconColor: AppColors.secondary,
-                  title: 'Task created',
-                  time: 'Nov 1, 2026',
-                  desc: 'Created by Alex Rivera • Assigned to Cloud Sprint',
-                  isLast: true,
-                ),
-              ],
+              children: task.activities.asMap().entries.map((entry) {
+                final idx = entry.key;
+                final act = entry.value;
+                return _buildTimelineItem(
+                  icon: act.icon,
+                  iconBg: idx == 0 ? AppColors.primaryFixed : AppColors.secondaryFixed,
+                  iconColor: idx == 0 ? AppColors.primary : AppColors.secondary,
+                  title: act.title,
+                  time: act.timestamp,
+                  desc: act.description,
+                  isLast: idx == task.activities.length - 1,
+                );
+              }).toList(),
             ),
           ),
           const SizedBox(height: 16),
@@ -755,7 +958,7 @@ class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
                         style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
                       ),
                       Text(
-                        'Ready to complete? Run a 25m Pomodoro session.',
+                        'Ready to work? Run a 25m Pomodoro session.',
                         style: TextStyle(fontSize: 11, color: AppColors.onSurfaceVariant),
                       ),
                     ],
@@ -800,8 +1003,10 @@ class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
             children: [
               OutlinedButton.icon(
                 onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Edit mode opened.')),
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => AddTaskScreen(editingTask: task),
+                    ),
                   );
                 },
                 style: OutlinedButton.styleFrom(
